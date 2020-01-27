@@ -1,0 +1,27 @@
+---
+title: "Gill_Sarah_ML_PS2"
+author: "Sarah Gill"
+date: "1/27/2020"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+setwd("~/Documents/GitHub/problem-set-2")
+library(readr)
+
+```
+
+
+
+```{r}
+
+nes2008_df <- read_csv("nes2008.csv")
+
+regn_model <- lm(biden~female+age+educ+dem+rep, data = nes2008_df)
+
+summary(regn_model)
+
+
+
+```
