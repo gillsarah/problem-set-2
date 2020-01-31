@@ -8,20 +8,63 @@ output: pdf_document
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 setwd("~/Documents/GitHub/problem-set-2")
-library(readr)
 
 ```
 
+```{r}
+library(readr)
+library(rcfss)
+set.seed(1234)
+```
 
 
+1. Estimate the MSE of the model using the traditional approach. That is, fit the linear
+regression model using the entire dataset and calculate the mean squared error for the entire dataset.
 ```{r}
 
 nes2008_df <- read_csv("nes2008.csv")
 
-regn_model <- lm(biden~female+age+educ+dem+rep, data = nes2008_df)
+regn_model <- glm(biden~female+age+educ+dem+rep, data = nes2008_df)
 
 summary(regn_model)
 
-
+(mse <- augment(regn_model, newdata = nes2008_df) %>%
+  mse(truth = biden, estimate = .fitted))
 
 ```
+Present and discuss your results at a simple, high level.
+
+mse = 395.27
+
+That seems large.
+
+
+
+2. Calculate the test MSE of the model using the simple holdout validation approach.
+```{r simple_holdout}
+
+nes_split <- initial_split(data = nes2008_df, 
+                            prop = 0.5) #split the data in half
+nes_train <- training(nes_split) #random subsample to train
+nes_test <- testing(nes_split)
+
+nes_lm <- glm(biden~female+age+educ+dem+rep, data = nes_train) #fit model on training data
+
+(train_mse <- augment(nes_lm, newdata = nes_train) %>%
+  mse(truth = biden, estimate = .fitted))
+
+(test_mse <- augment(nes_lm, newdata = nes_test) %>%
+  mse(truth = biden, estimate = .fitted))
+
+```
+
+This seems wrong!.....
+
+
+3.
+```{r}
+
+```
+
+
+
