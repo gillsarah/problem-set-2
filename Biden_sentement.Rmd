@@ -43,28 +43,69 @@ That seems large.
 2. Calculate the test MSE of the model using the simple holdout validation approach.
 ```{r simple_holdout}
 
+#Split the sample set into a training set (50%) and a holdout set (50%). Be sure to set your seed prior to this part of your code to guarantee reproducibility of results.
 nes_split <- initial_split(data = nes2008_df, 
                             prop = 0.5) #split the data in half
 nes_train <- training(nes_split) #random subsample to train
 nes_test <- testing(nes_split)
 
+#Fit the linear regression model using only the training observations.
 nes_lm <- glm(biden~female+age+educ+dem+rep, data = nes_train) #fit model on training data
 
 (train_mse <- augment(nes_lm, newdata = nes_train) %>%
   mse(truth = biden, estimate = .fitted))
 
+
+#Calculate the MSE using only the test set observations.
 (test_mse <- augment(nes_lm, newdata = nes_test) %>%
   mse(truth = biden, estimate = .fitted))
 
 ```
 
-This seems wrong!.....
+This seems wrong?!.....
+
+How does this value compare to the training MSE from question 1? Present numeric
+comparison and discuss a bit.
 
 
-3.
-```{r}
+3. Repeat the simple validation set approach from the previous question 1000 times, using 1000 different splits of the observations into a training set and a test/validation set. 
+```{r mse_list}
+#Rei: replicate function makes doing it much easier than like looping
+#source https://www.datamentor.io/r-programming/repeat-loop/
+x <- 1
+mse_list <- c()
+
+repeat{
+  nes_split <- initial_split(data = nes2008_df, 
+                            prop = 0.5) #split the data in half
+  nes_train <- training(nes_split) #random subsample to train
+  nes_test <- testing(nes_split)
+
+  #Fit the linear regression model using only the training observations.
+  nes_lm <- glm(biden~female+age+educ+dem+rep, data = nes_train) #fit model on training   data
+  mse <- augment(nes_lm, newdata = nes_test) %>%
+    mse(truth = biden, estimate = .fitted)%>% 
+    select(.estimate)%>%
+    as.numeric()
+  mse_list <- append(mse_list,mse)
+  x= x+1
+  
+  if (x == 1000){
+    break
+  }
+}
+
+
+```
+Visualize your results as a sampling distribution ( hint: think histogram or density plots). Comment on the results obtained.
+
+```{r dependson=mse_list}
+data <- data.frame(mse = mse_list)
+
+ggplot(data, aes(x = mse))+
+  geom_histogram(binwidth = 1, alpha = 0.75) 
+  
 
 ```
 
-
-
+Comment.....
