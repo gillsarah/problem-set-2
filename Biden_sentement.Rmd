@@ -9,14 +9,56 @@ output: pdf_document
 knitr::opts_chunk$set(echo = TRUE)
 setwd("~/Documents/GitHub/problem-set-2")
 
+mse <- function(data, ...) {
+  UseMethod("mse")
+}
+
+#' @export
+#' @rdname mse
+mse.data.frame <- function(data, truth, estimate, na_rm = TRUE, ...) {
+
+  metric_summarizer(
+    metric_nm = "mse",
+    metric_fn = mse_vec,
+    data = data,
+    truth = !! rlang::enquo(truth),
+    estimate = !! rlang::enquo(estimate),
+    na_rm = na_rm,
+    ...
+  )
+
+}
+
+
+#' @export
+#' @rdname mse
+mse_vec <- function(truth, estimate, na_rm = TRUE, ...) {
+
+  mse_impl <- function(truth, estimate) {
+    mean((truth - estimate) ^ 2)
+  }
+
+  metric_vec_template(
+    metric_impl = mse_impl,
+    truth = truth,
+    estimate = estimate,
+    na_rm = na_rm,
+    cls = "numeric",
+    ...
+  )
+
+}
 ```
 
 ```{r}
 library(readr)
-library(rcfss)
+#library(rcfss) #breaks tidy
 library(boot)
 library(tidyverse)
 library(broom)
+library(dplyr)
+library(rsample)
+library(yardstick)
 set.seed(1234)
 ```
 
@@ -27,7 +69,7 @@ regression model using the entire dataset and calculate the mean squared error f
 
 nes2008_df <- read_csv("nes2008.csv")
 
-regn_model <- glm(biden~female+age+educ+dem+rep, data = nes2008_df)
+regn_model <- glm(biden ~ female + age + educ + dem + rep, data = nes2008_df)
 
 summary(regn_model)
 
@@ -39,7 +81,7 @@ Present and discuss your results at a simple, high level.
 
 mse = 395.27
 
-This seems large, especially given the values that we are estimating (mean 62, variance 505). The mse, the average of the squared difference between estimates and the datapoints.
+This seems large, especially given the values that we are estimating (mean 62, variance 505). The mse, the average of the squared difference between estimates and the data points.
 ```{r}
 max(nes2008_df$biden)
 min(nes2008_df$biden)
@@ -72,16 +114,15 @@ nes_lm <- glm(biden~female+age+educ+dem+rep, data = nes_train) #fit model on tra
 ```
 
 mse = 389.16
-(recal mse from the simple general linear model was 395.27)
+(recall mse from the simple general linear model was 395.27)
 
-This is a slight improvement over the mse for the stnadard glm, however this is not expected and is likely because of the particular draw (see 3). Since we are modeling useing only half of the data, then testing it on the other half we may expect a higher mse given that this estimate is generated from a smaller dataset, and unlike in 1 it is compared to different data than it was produced from.
+This is a slight improvement over the mse for the standard glm, however this is not expected and is likely because of the particular draw (see 3). Since we are modeling using only half of the data, then testing it on the other half we may expect a higher mse given that this estimate is generated from a smaller dataset, and unlike in 1 it is compared to different data than it was produced from.
 
 
 
 3. Repeat the simple validation set approach from the previous question 1000 times, using 1000 different splits of the observations into a training set and a test/validation set. 
 ```{r mse_list}
-#Rei: replicate function makes doing it much easier than like looping
-#source https://www.datamentor.io/r-programming/repeat-loop/
+
 x <- 1
 mse_list <- c()
 
@@ -104,7 +145,7 @@ repeat{
     break
   }
 }
- 
+ #source https://www.datamentor.io/r-programming/repeat-loop/
 mean(mse_list)
 
 ```
@@ -119,7 +160,7 @@ ggplot(data, aes(x = mse))+
 
 ```
 
-When we itteratively split the data, run a regression on each split and extract the mse we can see that the mse estimates fall in a roughly normal distribution, cenered on the mean 398.37. 
+When we iteratively split the data, run a regression on each split and extract the mse we can see that the mse estimates fall in a roughly normal distribution, centered on the mean 398.37. 
 
 Note that this mean is similar to the mse from the simple linear regression: 395.27
 
@@ -128,26 +169,23 @@ Note that this mean is similar to the mse from the simple linear regression: 395
 4. Compare the estimated parameters and standard errors from the original model in question 1 (the model estimated using all of the available data) to parameters and standard errors estimated using the bootstrap (B = 1000). Comparison should include, at a minimum, both numeric output as well as discussion on differences, similarities, etc. Talk also about the conceptual use and impact of bootstrapping.
 
 ```{r bootstrap}
+#broom::tidy()
 
-regn_model <- glm(biden ~ female + age + educ + dem + rep, data = nes2008_df)
-#summary(regn_model)$coefficients
-analysis((regn_model)
+regn_model <- lm(biden ~ female + age + educ + dem + rep, data = nes2008_df)
+tidy(regn_model)
 
 
 # bootstrapped estimates of the parameter estimates and standard errors
-lm_coefs <- function(nes2008_df, ...) {
+lm_coefs <- function(splits, ...) {
   ## use `analysis` or `as.data.frame` to get the analysis data
-  mod <- lm(..., data = analysis(nes))
-  #summary(mod)$coefficients
+  mod <- lm(..., data = analysis(splits))
+  tidy(mod)
 }
 
 biden_boot <- nes2008_df %>%
   bootstraps(1000) %>%
   mutate(coef = map(splits, lm_coefs, as.formula(biden ~ female + age + educ + dem + rep)))
 
-biden_boot$coef[2]
-
-unnest(coef)
 
 biden_boot %>%
   unnest(coef) %>%
@@ -155,49 +193,20 @@ biden_boot %>%
   summarize(.estimate = mean(estimate),
             .se = sd(estimate, na.rm = TRUE))
 
+
 ```
+Bootstrap:                      Linear Regression:
+Estimates:                      Estimates:
+
+(Intercept)	58.7844692		      (Intercept)	58.81125899	
+age	        0.0484685			      age	        0.04825892	
+dem	        15.4786044	        dem	        15.42425563		
+educ	      -0.3448924		      educ	      -0.34533479
+female	    4.0856644			      female	    4.10323009
+rep	        -15.8100846	        rep	        -15.84950614
 
 
-```{r}
-regn_model <- glm(biden ~ female+age+educ+dem+rep, data = nes2008_df)
-summary(regn_model)
+The bootstrap and linear regression estimates are very similar, often only different at the tens or hundredths place.
 
-boot_mean <- function(data,i) {
-  d <- data[i] # allows boot to select sample
-  return(mean(d))
-}
+Bootstrap standard errors are larger though (e.g. the SE on the coefficient estimate for age is 0.0282474  for the liner mode and 0.02897384 for the bootstrap). However, some SEs are actually larger in the linear model than the bootstrap (e.g. females is 0.9482286 in the linear model and 0.94451110 in the bootstrap). The larger standard errors in bootstrap makes sense because we are not assuming a distribution. This is useful if we are not prepared to make an assumption about the distribution of our population. 
 
-# Set number of bootstrap replications
-B=10000
-test <- nes2008_df$biden
-# bootstrapping with B replications.
-boot.mean <- boot(data=test, statistic=boot_mean, B)
-
-#?analysis #built infn dplyr
-
-
-regn_model$coefficients[1]
-#regn_model$sd????? how do I get sd
-
-#From prof 
-# Now, bootstrap SE for full simulation (1,000)
-mean_ice <- function(splits) {
-  x <- analysis(splits)
-  mean(x$sim)
-}
-#1000 bootstaps (out of bag) and record mean
-ice_boot <- ice %>%
-  bootstraps(1000) %>%
-  mutate(mean = map_dbl(splits, mean_ice))
-
-mean(ice_boot$mean)
-
-boot_sem <- sd(ice_boot$mean) #recprd and store sd of the mean
-boot_sem
-
-# compare
-tibble(sem, boot_sem)
-```
-
-
-Bootstrap standard erros are larger becuase we are not assuming a distribution. This is useful if we are not prepared to make an asumption about the distribution of our population. 
