@@ -14,6 +14,9 @@ setwd("~/Documents/GitHub/problem-set-2")
 ```{r}
 library(readr)
 library(rcfss)
+library(boot)
+library(tidyverse)
+library(broom)
 set.seed(1234)
 ```
 
@@ -36,7 +39,13 @@ Present and discuss your results at a simple, high level.
 
 mse = 395.27
 
-That seems large.
+This seems large, especially given the values that we are estimating (mean 62, variance 505). The mse, the average of the squared difference between estimates and the datapoints.
+```{r}
+max(nes2008_df$biden)
+min(nes2008_df$biden)
+var(nes2008_df$biden)
+mean(nes2008_df$biden)
+```
 
 
 
@@ -52,8 +61,8 @@ nes_test <- testing(nes_split)
 #Fit the linear regression model using only the training observations.
 nes_lm <- glm(biden~female+age+educ+dem+rep, data = nes_train) #fit model on training data
 
-(train_mse <- augment(nes_lm, newdata = nes_train) %>%
-  mse(truth = biden, estimate = .fitted))
+#(train_mse <- augment(nes_lm, newdata = nes_train) %>%
+#  mse(truth = biden, estimate = .fitted))
 
 
 #Calculate the MSE using only the test set observations.
@@ -62,10 +71,11 @@ nes_lm <- glm(biden~female+age+educ+dem+rep, data = nes_train) #fit model on tra
 
 ```
 
-This seems wrong?!.....
+mse = 389.16
+(recal mse from the simple general linear model was 395.27)
 
-How does this value compare to the training MSE from question 1? Present numeric
-comparison and discuss a bit.
+This is a slight improvement over the mse for the stnadard glm, however this is not expected and is likely because of the particular draw (see 3). Since we are modeling useing only half of the data, then testing it on the other half we may expect a higher mse given that this estimate is generated from a smaller dataset, and unlike in 1 it is compared to different data than it was produced from.
+
 
 
 3. Repeat the simple validation set approach from the previous question 1000 times, using 1000 different splits of the observations into a training set and a test/validation set. 
@@ -94,7 +104,8 @@ repeat{
     break
   }
 }
-
+ 
+mean(mse_list)
 
 ```
 Visualize your results as a sampling distribution ( hint: think histogram or density plots). Comment on the results obtained.
@@ -108,4 +119,85 @@ ggplot(data, aes(x = mse))+
 
 ```
 
-Comment.....
+When we itteratively split the data, run a regression on each split and extract the mse we can see that the mse estimates fall in a roughly normal distribution, cenered on the mean 398.37. 
+
+Note that this mean is similar to the mse from the simple linear regression: 395.27
+
+
+
+4. Compare the estimated parameters and standard errors from the original model in question 1 (the model estimated using all of the available data) to parameters and standard errors estimated using the bootstrap (B = 1000). Comparison should include, at a minimum, both numeric output as well as discussion on differences, similarities, etc. Talk also about the conceptual use and impact of bootstrapping.
+
+```{r bootstrap}
+
+regn_model <- glm(biden ~ female + age + educ + dem + rep, data = nes2008_df)
+#summary(regn_model)$coefficients
+analysis((regn_model)
+
+
+# bootstrapped estimates of the parameter estimates and standard errors
+lm_coefs <- function(nes2008_df, ...) {
+  ## use `analysis` or `as.data.frame` to get the analysis data
+  mod <- lm(..., data = analysis(nes))
+  #summary(mod)$coefficients
+}
+
+biden_boot <- nes2008_df %>%
+  bootstraps(1000) %>%
+  mutate(coef = map(splits, lm_coefs, as.formula(biden ~ female + age + educ + dem + rep)))
+
+biden_boot$coef[2]
+
+unnest(coef)
+
+biden_boot %>%
+  unnest(coef) %>%
+  group_by(term) %>%
+  summarize(.estimate = mean(estimate),
+            .se = sd(estimate, na.rm = TRUE))
+
+```
+
+
+```{r}
+regn_model <- glm(biden ~ female+age+educ+dem+rep, data = nes2008_df)
+summary(regn_model)
+
+boot_mean <- function(data,i) {
+  d <- data[i] # allows boot to select sample
+  return(mean(d))
+}
+
+# Set number of bootstrap replications
+B=10000
+test <- nes2008_df$biden
+# bootstrapping with B replications.
+boot.mean <- boot(data=test, statistic=boot_mean, B)
+
+#?analysis #built infn dplyr
+
+
+regn_model$coefficients[1]
+#regn_model$sd????? how do I get sd
+
+#From prof 
+# Now, bootstrap SE for full simulation (1,000)
+mean_ice <- function(splits) {
+  x <- analysis(splits)
+  mean(x$sim)
+}
+#1000 bootstaps (out of bag) and record mean
+ice_boot <- ice %>%
+  bootstraps(1000) %>%
+  mutate(mean = map_dbl(splits, mean_ice))
+
+mean(ice_boot$mean)
+
+boot_sem <- sd(ice_boot$mean) #recprd and store sd of the mean
+boot_sem
+
+# compare
+tibble(sem, boot_sem)
+```
+
+
+Bootstrap standard erros are larger becuase we are not assuming a distribution. This is useful if we are not prepared to make an asumption about the distribution of our population. 
